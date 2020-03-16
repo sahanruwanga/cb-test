@@ -1,0 +1,31 @@
+version: 0.2
+
+
+phases:
+  install:
+    commands:
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2&
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+      - REPOSITORY_URI=610968236798.dkr.ecr.us-east-2.amazonaws.com/codebuild-test
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=build-$(echo $CODEBUILD_BUILD_ID | awk -F":" '{print $2}')
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build -t $REPOSITORY_URI:5.11.0-m8-1584335374 https://github.com/wso2/product-is/releases/download/v5.11.0-m8/wso2is-5.11.0-m8.zip
+      - docker tag $REPOSITORY_URI:5.11.0-m8-1584335374 $REPOSITORY_URI:5.11.0-m8-1584335374
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:5.11.0-m8-1584335374
+      - docker push $REPOSITORY_URI:5.11.0-m8-1584335374
+      - echo Writing image definitions file...
+      - printf '[{"name":"nodeapp","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - cat imagedefinitions.json
